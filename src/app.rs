@@ -1,6 +1,6 @@
 use std::io;
 
-use crossterm::event::{self, Event, KeyCode};
+use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -18,7 +18,7 @@ enum Mode {
     Rename(String),
     DamageCreature,
     HealCreature,
-    EditNotes,
+    EditNotes(String),
 }
 impl Mode {
     fn get_instructions(&self) -> Line {
@@ -40,7 +40,13 @@ impl Mode {
                 " Confirm: ".into(),
                 "Enter".blue().bold(),
                 ", Cancel: ".into(),
-                "Esc".blue().bold(),
+                "Esc ".blue().bold(),
+            ]),
+            Mode::EditNotes(_) => Line::from(vec![
+                " Confirm: ".into(),
+                "Enter".blue().bold(),
+                " (use alt to break lines), Cancel: ".into(),
+                "Esc ".blue().bold(),
             ]),
             _ => Line::from(vec![]),
         }
@@ -105,6 +111,10 @@ impl App {
             return Ok(());
         };
 
+        if !ev.is_press() {
+            return Ok(());
+        }
+
         let hovered_creature = self
             .list_state
             .selected()
@@ -149,6 +159,11 @@ impl App {
                         self.mode = Mode::Rename(creat.name.clone());
                     }
                 }
+                KeyCode::Char('n') => {
+                    if let Some(creat) = hovered_creature {
+                        self.mode = Mode::EditNotes(creat.notes.clone());
+                    }
+                }
                 KeyCode::Char('d') => {
                     if hovered_creature.is_some() {
                         let index = self.list_state.selected().unwrap();
@@ -179,11 +194,42 @@ impl App {
                         selected_creature.name = selected_creature
                             .name
                             .chars()
-                            .take(selected_creature.name.len() - 1)
+                            .take(selected_creature.name.len().saturating_sub(1))
                             .collect();
                     }
                     KeyCode::Char(ch) => {
                         selected_creature.name.push(ch);
+                    }
+
+                    _ => {}
+                }
+            }
+
+            Mode::EditNotes(old_content) => {
+                let selected_creature = hovered_creature.unwrap();
+                match ev.code {
+                    KeyCode::Enter => {
+                        // This doesn't work for some reason
+                        if ev.modifiers.contains(KeyModifiers::ALT) {
+                            selected_creature.notes.push('\n');
+                        } else {
+                            self.mode = Mode::Normal;
+                        }
+                    }
+                    KeyCode::Esc => {
+                        // Revert name
+                        selected_creature.notes = old_content.clone();
+                        self.mode = Mode::Normal;
+                    }
+                    KeyCode::Backspace => {
+                        selected_creature.notes = selected_creature
+                            .name
+                            .chars()
+                            .take(selected_creature.notes.len().saturating_sub(1))
+                            .collect();
+                    }
+                    KeyCode::Char(ch) => {
+                        selected_creature.notes.push(ch);
                     }
 
                     _ => {}
@@ -211,7 +257,6 @@ impl Widget for App {
         // Creature list
         let list_block = Block::bordered()
             .title(Line::from(" Creatures ".bold()).centered())
-            .title_bottom(self.mode.get_instructions().centered())
             .borders(Borders::ALL);
 
         let selected_index = self.list_state.selected();
@@ -234,7 +279,7 @@ impl Widget for App {
         .block(
             Block::bordered()
                 .title(Line::from(" Notes ".bold()).centered())
-                .title_bottom(Line::from(" ctrl+enter to save ".bold()).centered())
+                .title_bottom(self.mode.get_instructions().centered())
                 .border_set(border::PLAIN),
         )
         .render(layout[1], buf);
