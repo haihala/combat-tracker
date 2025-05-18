@@ -18,6 +18,7 @@ enum Mode {
     Normal,
     Rename(String),
     SetHealth(i32),
+    SetInitiative(i32),
     DamageCreature,
     HealCreature,
     EditNotes(String),
@@ -40,9 +41,11 @@ impl Mode {
                 "D".blue().bold(),
                 ")estroy (".into(),
                 "H".blue().bold(),
-                ")health ".into(),
+                ")health (".into(),
+                "I".blue().bold(),
+                ")nitiative ".into(),
             ]),
-            Mode::Rename(_) | Mode::SetHealth(_) => Line::from(vec![
+            Mode::Rename(_) | Mode::SetHealth(_) | Mode::SetInitiative(_) => Line::from(vec![
                 " Confirm: ".into(),
                 "Enter".blue().bold(),
                 ", Cancel: ".into(),
@@ -194,6 +197,11 @@ impl App {
                         self.mode = Mode::SetHealth(creat.health);
                     }
                 }
+                KeyCode::Char('i') => {
+                    if let Some(creat) = hovered_creature {
+                        self.mode = Mode::SetInitiative(creat.initiative);
+                    }
+                }
                 _ => {}
             },
 
@@ -255,41 +263,63 @@ impl App {
             }
 
             Mode::SetHealth(old_amount) => {
-                let selected_creature = hovered_creature.unwrap();
-                match ev.code {
-                    KeyCode::Enter => {
-                        self.mode = Mode::Normal;
-                    }
-                    KeyCode::Esc => {
-                        // Revert name
-                        selected_creature.health = old_amount.clone();
-                        self.mode = Mode::Normal;
-                    }
-                    KeyCode::Backspace => {
-                        let old_amount = selected_creature.health.to_string();
-                        selected_creature.health = old_amount
-                            .chars()
-                            .take(old_amount.len() - 1)
-                            .collect::<String>()
-                            .parse()
-                            .unwrap_or_default();
-                    }
-                    KeyCode::Char(ch) if ch.is_ascii_digit() => {
-                        let mut old_amount = selected_creature.health.to_string();
-                        old_amount.push(ch);
+                self.numeric_edit(|creature| &mut creature.health, ev, *old_amount);
+            }
 
-                        // If number won't fit, sets to zero
-                        selected_creature.health = old_amount.parse().unwrap_or_default();
-                    }
-
-                    _ => {}
-                }
+            Mode::SetInitiative(old_amount) => {
+                self.numeric_edit(|creature| &mut creature.initiative, ev, *old_amount);
             }
 
             _ => {}
         }
 
         Ok(())
+    }
+
+    fn numeric_edit(
+        &mut self,
+        extract: impl Fn(&mut Creature) -> &mut i32,
+        ev: event::KeyEvent,
+        old_amount: i32,
+    ) {
+        let Some(creature) = self
+            .list_state
+            .selected()
+            .and_then(|index| self.creatures.get_mut(index))
+        else {
+            panic!("Editing an nonexistent")
+        };
+
+        let attribute = extract(creature);
+
+        match ev.code {
+            KeyCode::Enter => {
+                self.mode = Mode::Normal;
+            }
+            KeyCode::Esc => {
+                // Revert name
+                *attribute = old_amount.clone();
+                self.mode = Mode::Normal;
+            }
+            KeyCode::Backspace => {
+                let old_amount = attribute.to_string();
+                *attribute = old_amount
+                    .chars()
+                    .take(old_amount.len() - 1)
+                    .collect::<String>()
+                    .parse()
+                    .unwrap_or_default();
+            }
+            KeyCode::Char(ch) if ch.is_ascii_digit() => {
+                let mut old_amount = attribute.to_string();
+                old_amount.push(ch);
+
+                // If number won't fit, sets to zero
+                *attribute = old_amount.parse().unwrap_or_default();
+            }
+
+            _ => {}
+        }
     }
 }
 
@@ -322,22 +352,20 @@ impl Widget for App {
         table_block.render(main_layout[0], buf);
 
         let selected_index = self.list_state.selected();
-        let mut initiative_list_items: Vec<ListItem> = vec![];
-        let mut name_list_items: Vec<ListItem> = vec![];
-        let mut health_list_items: Vec<ListItem> = vec![];
+        let (initiative_list, name_list, health_list) = self
+            .creatures
+            .iter()
+            .enumerate()
+            .map(|(index, creature)| creature.render(index, selected_index))
+            .collect::<(Vec<ListItem>, Vec<ListItem>, Vec<ListItem>)>();
 
-        for (index, creature) in self.creatures.iter().enumerate() {
-            let (initiative_item, name_item, health_item) = creature.render(index, selected_index);
-            initiative_list_items.push(initiative_item);
-            name_list_items.push(name_item);
-            health_list_items.push(health_item);
+        for (column, items) in [initiative_list, name_list, health_list]
+            .into_iter()
+            .enumerate()
+        {
+            let list = List::new(items);
+            StatefulWidget::render(list, table_layout[column], buf, &mut self.list_state);
         }
-        let initiative_list = List::new(initiative_list_items);
-        let name_list = List::new(name_list_items);
-        let health_list = List::new(health_list_items);
-        StatefulWidget::render(initiative_list, table_layout[0], buf, &mut self.list_state);
-        StatefulWidget::render(name_list, table_layout[1], buf, &mut self.list_state);
-        StatefulWidget::render(health_list, table_layout[2], buf, &mut self.list_state);
 
         // Notes of selected creature
         Paragraph::new(
@@ -360,7 +388,7 @@ impl Widget for App {
 struct Creature {
     name: String,
     health: i32,
-    initiative: usize,
+    initiative: i32,
     notes: String,
 }
 
