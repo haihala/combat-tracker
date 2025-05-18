@@ -1,6 +1,7 @@
-use std::io;
+use std::{char, io};
 
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use log::info;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -16,6 +17,7 @@ use ratatui::{
 enum Mode {
     Normal,
     Rename(String),
+    SetHealth(i32),
     DamageCreature,
     HealCreature,
     EditNotes(String),
@@ -25,7 +27,7 @@ impl Mode {
         match self {
             Mode::Normal => Line::from(vec![
                 " Move: ".into(),
-                "hjkl".blue().bold(),
+                "JjkK".blue().bold(),
                 ", Exit: ".into(),
                 "Esc".blue().bold(),
                 ", Actions: (".into(),
@@ -36,9 +38,11 @@ impl Mode {
                 "C".blue().bold(),
                 ")opy, (".into(),
                 "D".blue().bold(),
-                ")estroy ".into(),
+                ")estroy (".into(),
+                "H".blue().bold(),
+                ")health ".into(),
             ]),
-            Mode::Rename(_) => Line::from(vec![
+            Mode::Rename(_) | Mode::SetHealth(_) => Line::from(vec![
                 " Confirm: ".into(),
                 "Enter".blue().bold(),
                 ", Cancel: ".into(),
@@ -116,21 +120,15 @@ impl App {
             .selected()
             .and_then(|index| self.creatures.get_mut(index));
 
+        info!("Key press - {:?}", ev);
+
         match &self.mode {
             Mode::Normal => match ev.code {
                 // Quitting
                 KeyCode::Esc => self.running = false,
 
                 // Navigation
-                KeyCode::Char('h') => self.list_state.select_first(),
-                KeyCode::Char('j') => self.list_state.select(Some(
-                    (self
-                        .list_state
-                        .selected()
-                        .map(|num| num + 1)
-                        .unwrap_or_default())
-                        % self.creatures.len(),
-                )),
+                KeyCode::Char('K') => self.list_state.select_first(),
                 KeyCode::Char('k') => self.list_state.select(Some({
                     let curr = self.list_state.selected().unwrap_or_default();
                     if curr == 0 {
@@ -139,7 +137,15 @@ impl App {
                         curr - 1
                     }
                 })),
-                KeyCode::Char('l') => self.list_state.select(Some(self.creatures.len() - 1)),
+                KeyCode::Char('j') => self.list_state.select(Some(
+                    (self
+                        .list_state
+                        .selected()
+                        .map(|num| num + 1)
+                        .unwrap_or_default())
+                        % self.creatures.len(),
+                )),
+                KeyCode::Char('J') => self.list_state.select(Some(self.creatures.len() - 1)),
 
                 // Actions
                 KeyCode::Char('a') => {
@@ -160,6 +166,14 @@ impl App {
                         self.mode = Mode::EditNotes(creat.notes.clone());
                     }
                 }
+                KeyCode::Char('c') => {
+                    // TODO: Think about automatically renaming with indices or something
+                    if let Some(hovered) = hovered_creature {
+                        let index = self.list_state.selected().unwrap();
+                        let duplicate = hovered.clone();
+                        self.creatures.insert(index + 1, duplicate);
+                    }
+                }
                 KeyCode::Char('d') => {
                     if hovered_creature.is_some() {
                         let index = self.list_state.selected().unwrap();
@@ -172,11 +186,9 @@ impl App {
                         }
                     }
                 }
-                KeyCode::Char('c') => {
-                    if let Some(hovered) = hovered_creature {
-                        let index = self.list_state.selected().unwrap();
-                        let duplicate = hovered.clone();
-                        self.creatures.insert(index + 1, duplicate);
+                KeyCode::Char('h') => {
+                    if let Some(creat) = hovered_creature {
+                        self.mode = Mode::SetHealth(creat.health);
                     }
                 }
                 _ => {}
@@ -239,6 +251,38 @@ impl App {
                 }
             }
 
+            Mode::SetHealth(old_amount) => {
+                let selected_creature = hovered_creature.unwrap();
+                match ev.code {
+                    KeyCode::Enter => {
+                        self.mode = Mode::Normal;
+                    }
+                    KeyCode::Esc => {
+                        // Revert name
+                        selected_creature.health = old_amount.clone();
+                        self.mode = Mode::Normal;
+                    }
+                    KeyCode::Backspace => {
+                        let old_amount = selected_creature.health.to_string();
+                        selected_creature.health = old_amount
+                            .chars()
+                            .take(old_amount.len() - 1)
+                            .collect::<String>()
+                            .parse()
+                            .unwrap_or_default();
+                    }
+                    KeyCode::Char(ch) if ch.is_ascii_digit() => {
+                        let mut old_amount = selected_creature.health.to_string();
+                        old_amount.push(ch);
+
+                        // If number won't fit, sets to zero
+                        selected_creature.health = old_amount.parse().unwrap_or_default();
+                    }
+
+                    _ => {}
+                }
+            }
+
             _ => {}
         }
 
@@ -292,7 +336,7 @@ impl Widget for App {
 #[derive(Debug, Clone)]
 struct Creature {
     name: String,
-    health: usize,
+    health: i32,
     notes: String,
 }
 
@@ -313,7 +357,10 @@ impl Creature {
             self.name.clone()
         };
 
-        ListItem::from(name).fg(fg_color).bg(bg_color)
+        let health = self.health;
+        let text = format!("{name}    {health}");
+
+        ListItem::from(text).fg(fg_color).bg(bg_color)
     }
 }
 
