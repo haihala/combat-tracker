@@ -13,8 +13,9 @@ use ratatui::{
     DefaultTerminal,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Mode {
+    Help,
     Normal,
     Rename(String),
     SetHealth(i32),
@@ -25,26 +26,12 @@ enum Mode {
 impl Mode {
     fn get_instructions(&self) -> Line {
         match self {
+            Mode::Help => panic!("Should not ask for instructions in help mode"),
             Mode::Normal => Line::from(vec![
-                " Move: ".into(),
-                "JjkK".blue().bold(),
-                ", Exit: ".into(),
+                " Exit: ".into(),
                 "Esc".blue().bold(),
-                ", Actions: (".into(),
-                "A".blue().bold(),
-                ")dd, (".into(),
-                "R".blue().bold(),
-                ")ename, (".into(),
-                "C".blue().bold(),
-                ")opy, (".into(),
-                "D".blue().bold(),
-                ")estroy (".into(),
-                "H".blue().bold(),
-                ")health (".into(),
-                "I".blue().bold(),
-                ")nitiative ".into(),
-                "Modify health: ".into(),
-                "+-<num>".blue().bold(),
+                " Help: ".into(),
+                "? ".blue().bold(),
             ]),
             Mode::Rename(_) | Mode::SetHealth(_) | Mode::SetInitiative(_) | Mode::HealthShift => {
                 Line::from(vec![
@@ -71,6 +58,109 @@ pub struct App {
     list_state: ListState,
     creatures: Vec<Creature>,
 }
+
+enum HotKey {
+    Divider {
+        text: &'static str,
+        newline: bool,
+    },
+    Embed {
+        pre: &'static str,
+        color: &'static str,
+        post: &'static str,
+    },
+    Label {
+        label: &'static str,
+        keys: &'static str,
+    },
+}
+
+const HELP_BLURB: &'static str = "\
+Howdy partner, this is a combat tracker I use for my Pathfinder 2e games.
+It's designed for me and since I'm a bit of a power user, so it's a modal
+system that's exclusively keyboard operated.
+
+Normal mode is the most complex. Besides that most modes have like three shoftcuts.
+Most modes have a banner at the bottom with some help.
+
+Best of luck
+";
+const HOTKEYS: &[HotKey] = &[
+    HotKey::Divider {
+        text: "In normal mode",
+        newline: false,
+    },
+    HotKey::Label {
+        label: "Open this help message",
+        keys: "?",
+    },
+    HotKey::Label {
+        label: "Quit",
+        keys: "Esc",
+    },
+    HotKey::Label {
+        label: "Move",
+        keys: "JjkK",
+    },
+    HotKey::Embed {
+        pre: "",
+        color: "A",
+        post: "dd a creature",
+    },
+    HotKey::Embed {
+        pre: "",
+        color: "R",
+        post: "ename a creature",
+    },
+    HotKey::Embed {
+        pre: "",
+        color: "C",
+        post: "opy (duplicate) a creature",
+    },
+    HotKey::Embed {
+        pre: "",
+        color: "D",
+        post: "elete a creature",
+    },
+    HotKey::Embed {
+        pre: "Set ",
+        color: "i",
+        post: "nitiative of a creature",
+    },
+    HotKey::Embed {
+        pre: "Set ",
+        color: "H",
+        post: "health a creature",
+    },
+    HotKey::Label {
+        label: "Subtract health",
+        keys: "-",
+    },
+    HotKey::Label {
+        label: "Add health",
+        keys: "+",
+    },
+    HotKey::Divider {
+        text: "In most editing modes",
+        newline: true,
+    },
+    HotKey::Label {
+        label: "Confirm",
+        keys: "Enter",
+    },
+    HotKey::Label {
+        label: "Cancel",
+        keys: "Esc",
+    },
+    HotKey::Divider {
+        text: "In help mode",
+        newline: true,
+    },
+    HotKey::Label {
+        label: "Return to normal mode",
+        keys: "Esc",
+    },
+];
 
 impl App {
     pub fn new() -> App {
@@ -134,6 +224,8 @@ impl App {
             Mode::Normal => match ev.code {
                 // Quitting
                 KeyCode::Esc => self.running = false,
+
+                KeyCode::Char('?') => self.mode = Mode::Help,
 
                 // Navigation
                 KeyCode::Char('K') => self.list_state.select_first(),
@@ -218,7 +310,6 @@ impl App {
                 }
                 _ => {}
             },
-
             Mode::Rename(old_name) => {
                 let selected_creature = hovered_creature.unwrap();
                 match ev.code {
@@ -244,7 +335,6 @@ impl App {
                     _ => {}
                 }
             }
-
             Mode::EditNotes(old_content) => {
                 let selected_creature = hovered_creature.unwrap();
                 match ev.code {
@@ -275,7 +365,6 @@ impl App {
                     _ => {}
                 }
             }
-
             Mode::SetHealth(old_amount) => {
                 let old = old_amount.clone();
                 self.numeric_edit(
@@ -286,7 +375,6 @@ impl App {
                     ev,
                 );
             }
-
             Mode::SetInitiative(old_amount) => {
                 let old = old_amount.clone();
                 self.numeric_edit(
@@ -297,7 +385,6 @@ impl App {
                     ev,
                 );
             }
-
             Mode::HealthShift => {
                 self.numeric_edit(
                     |creature| match creature.health_shift.unwrap() {
@@ -318,6 +405,11 @@ impl App {
                     },
                     ev,
                 );
+            }
+            Mode::Help => {
+                if ev.code == KeyCode::Esc {
+                    self.mode = Mode::Normal;
+                }
             }
         }
 
@@ -372,14 +464,51 @@ impl App {
             _ => {}
         }
     }
-}
 
-impl Widget for App {
-    fn render(mut self, area: Rect, buf: &mut Buffer) {
+    fn render_help(&mut self, area: Rect, buf: &mut Buffer) {
+        let main_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![Constraint::Length(8), Constraint::Fill(1)])
+            .spacing(1)
+            .split(area);
+
+        Paragraph::new(HELP_BLURB).render(main_layout[0], buf);
+
+        let list = List::new(HOTKEYS.into_iter().flat_map(|hk| match hk {
+            HotKey::Divider { text, newline } => {
+                let div = Line::from(text.bold());
+
+                if *newline {
+                    vec![Line::default(), div]
+                } else {
+                    vec![div]
+                }
+            }
+            HotKey::Embed { pre, color, post } => vec![Line::from(vec![
+                format!("{pre}(").into(),
+                color.blue().bold(),
+                format!("){post}").into(),
+            ])],
+            HotKey::Label { label, keys } => {
+                vec![Line::from(vec![
+                    format!("{label}: ").into(),
+                    keys.blue().bold(),
+                ])]
+            }
+        }))
+        .block(
+            Block::bordered()
+                .title(Line::from(" Hotkeys ".bold()).centered())
+                .borders(Borders::TOP),
+        );
+        Widget::render(list, main_layout[1], buf);
+    }
+
+    fn render_normal(&mut self, area: Rect, buf: &mut Buffer) {
         let main_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
-                Constraint::Max((self.creatures.len() + 2) as u16),
+                Constraint::Length((self.creatures.len() + 2) as u16),
                 Constraint::Fill(1),
             ])
             .spacing(1)
@@ -393,10 +522,10 @@ impl Widget for App {
         let table_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints(vec![
-                Constraint::Max(3),  // Initiative
-                Constraint::Fill(1), // Name
-                Constraint::Max(10), // Health
-                Constraint::Fill(2), // Statuses
+                Constraint::Length(3),  // Initiative
+                Constraint::Fill(1),    // Name
+                Constraint::Length(10), // Health
+                Constraint::Fill(2),    // Statuses
             ])
             .spacing(1)
             .split(table_block.inner(main_layout[0]));
@@ -432,6 +561,16 @@ impl Widget for App {
                 .border_set(border::PLAIN),
         )
         .render(main_layout[1], buf);
+    }
+}
+
+impl Widget for App {
+    fn render(mut self, area: Rect, buf: &mut Buffer) {
+        if self.mode == Mode::Help {
+            self.render_help(area, buf)
+        } else {
+            self.render_normal(area, buf)
+        }
     }
 }
 
