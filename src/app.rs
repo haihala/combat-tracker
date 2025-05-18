@@ -78,16 +78,19 @@ impl App {
                     name: "Goblin".into(),
                     health: 5,
                     notes: "Very gobliny".into(),
+                    ..Default::default()
                 },
                 Creature {
                     name: "Chodlin".into(),
                     health: 4,
                     notes: "Cousin of Boblin".into(),
+                    ..Default::default()
                 },
                 Creature {
                     name: "Boblin".into(),
                     health: 4,
                     notes: "The goblin".into(),
+                    ..Default::default()
                 },
             ],
         }
@@ -319,16 +322,20 @@ impl Widget for App {
         table_block.render(main_layout[0], buf);
 
         let selected_index = self.list_state.selected();
+        let mut initiative_list_items: Vec<ListItem> = vec![];
         let mut name_list_items: Vec<ListItem> = vec![];
         let mut health_list_items: Vec<ListItem> = vec![];
 
         for (index, creature) in self.creatures.iter().enumerate() {
-            let (name_item, health_item) = creature.render(index, selected_index);
+            let (initiative_item, name_item, health_item) = creature.render(index, selected_index);
+            initiative_list_items.push(initiative_item);
             name_list_items.push(name_item);
             health_list_items.push(health_item);
         }
+        let initiative_list = List::new(initiative_list_items);
         let name_list = List::new(name_list_items);
         let health_list = List::new(health_list_items);
+        StatefulWidget::render(initiative_list, table_layout[0], buf, &mut self.list_state);
         StatefulWidget::render(name_list, table_layout[1], buf, &mut self.list_state);
         StatefulWidget::render(health_list, table_layout[2], buf, &mut self.list_state);
 
@@ -353,11 +360,16 @@ impl Widget for App {
 struct Creature {
     name: String,
     health: i32,
+    initiative: usize,
     notes: String,
 }
 
 impl Creature {
-    fn render(&self, index: usize, selected_index: Option<usize>) -> (ListItem, ListItem) {
+    fn render(
+        &self,
+        index: usize,
+        selected_index: Option<usize>,
+    ) -> (ListItem, ListItem, ListItem) {
         let selected = selected_index == Some(index);
 
         // Inverse colors when selected
@@ -374,6 +386,9 @@ impl Creature {
         };
 
         (
+            ListItem::from(self.initiative.to_string())
+                .fg(fg_color)
+                .bg(bg_color),
             ListItem::from(name).fg(fg_color).bg(bg_color),
             ListItem::from(self.health.to_string())
                 .fg(fg_color)
@@ -387,6 +402,7 @@ impl Default for Creature {
         Creature {
             name: "".into(),
             health: 0,
+            initiative: 0,
             notes: "".into(),
         }
     }
