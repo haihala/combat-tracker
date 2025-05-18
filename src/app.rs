@@ -22,6 +22,7 @@ enum Mode {
     SetInitiative(i32),
     HealthShift,
     EditNotes(String),
+    Sort,
 }
 impl Mode {
     fn get_instructions(&self) -> Line {
@@ -41,6 +42,17 @@ impl Mode {
                     "Esc ".blue().bold(),
                 ])
             }
+            Mode::Sort => Line::from(vec![
+                " Press letter to determine order, shift reverses: (".into(),
+                "I".blue().bold(),
+                ")nitiative, (".into(),
+                "H".blue().bold(),
+                ")ealth, (".into(),
+                "N".blue().bold(),
+                ")ame or ".into(),
+                "Esc".blue().bold(),
+                "to cancel".into(),
+            ]),
             Mode::EditNotes(_) => Line::from(vec![
                 " Confirm: ".into(),
                 "Enter".blue().bold(),
@@ -140,6 +152,11 @@ const HOTKEYS: &[HotKey] = &[
         label: "Add health",
         keys: "+",
     },
+    HotKey::Embed {
+        pre: "",
+        color: "S",
+        post: "ort creatures",
+    },
     HotKey::Divider {
         text: "In most editing modes",
         newline: true,
@@ -147,6 +164,29 @@ const HOTKEYS: &[HotKey] = &[
     HotKey::Label {
         label: "Confirm",
         keys: "Enter",
+    },
+    HotKey::Label {
+        label: "Cancel",
+        keys: "Esc",
+    },
+    HotKey::Divider {
+        text: "In sort mode (shift inverts direction)",
+        newline: true,
+    },
+    HotKey::Embed {
+        pre: "Sort by ",
+        color: "I",
+        post: "nitiative",
+    },
+    HotKey::Embed {
+        pre: "Sort by ",
+        color: "H",
+        post: "ealth",
+    },
+    HotKey::Embed {
+        pre: "Sort by ",
+        color: "N",
+        post: "ame",
     },
     HotKey::Label {
         label: "Cancel",
@@ -226,6 +266,7 @@ impl App {
                 KeyCode::Esc => self.running = false,
 
                 KeyCode::Char('?') => self.mode = Mode::Help,
+                KeyCode::Char('s') => self.mode = Mode::Sort,
 
                 // Navigation
                 KeyCode::Char('K') => self.list_state.select_first(),
@@ -411,6 +452,43 @@ impl App {
                     self.mode = Mode::Normal;
                 }
             }
+            Mode::Sort => match ev.code {
+                KeyCode::Esc => {
+                    self.mode = Mode::Normal;
+                }
+
+                // Initiative
+                KeyCode::Char('i') => {
+                    self.creatures
+                        .sort_by(|a, b| a.initiative.cmp(&b.initiative));
+                    self.mode = Mode::Normal;
+                }
+                KeyCode::Char('I') => {
+                    self.creatures
+                        .sort_by(|b, a| a.initiative.cmp(&b.initiative));
+                    self.mode = Mode::Normal;
+                }
+
+                KeyCode::Char('h') => {
+                    self.creatures.sort_by(|a, b| a.health.cmp(&b.health));
+                    self.mode = Mode::Normal;
+                }
+                KeyCode::Char('H') => {
+                    self.creatures.sort_by(|b, a| a.health.cmp(&b.health));
+                    self.mode = Mode::Normal;
+                }
+
+                KeyCode::Char('n') => {
+                    self.creatures.sort_by(|a, b| a.name.cmp(&b.name));
+                    self.mode = Mode::Normal;
+                }
+                KeyCode::Char('N') => {
+                    self.creatures.sort_by(|b, a| a.name.cmp(&b.name));
+                    self.mode = Mode::Normal;
+                }
+
+                _ => {}
+            },
         }
 
         Ok(())
