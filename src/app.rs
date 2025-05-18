@@ -1,4 +1,4 @@
-use std::{char, io};
+use std::io;
 
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use log::info;
@@ -292,7 +292,7 @@ impl App {
 
 impl Widget for App {
     fn render(mut self, area: Rect, buf: &mut Buffer) {
-        let layout = Layout::default()
+        let main_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
                 Constraint::Max((self.creatures.len() + 2) as u16),
@@ -301,20 +301,36 @@ impl Widget for App {
             .spacing(1)
             .split(area);
 
-        // Creature list
-        let list_block = Block::bordered()
+        // Creature table
+        let table_block = Block::bordered()
             .title(Line::from(" Creatures ".bold()).centered())
             .borders(Borders::ALL);
 
+        let table_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![
+                Constraint::Max(5),  // Initiative
+                Constraint::Fill(1), // Name
+                Constraint::Max(5),  // Health
+                Constraint::Fill(2), // Statuses
+            ])
+            .spacing(1)
+            .split(table_block.inner(main_layout[0]));
+        table_block.render(main_layout[0], buf);
+
         let selected_index = self.list_state.selected();
-        let items: Vec<ListItem> = self
-            .creatures
-            .iter()
-            .enumerate()
-            .map(|(i, creature)| creature.render(i, selected_index))
-            .collect();
-        let list = List::new(items).block(list_block);
-        StatefulWidget::render(list, layout[0], buf, &mut self.list_state);
+        let mut name_list_items: Vec<ListItem> = vec![];
+        let mut health_list_items: Vec<ListItem> = vec![];
+
+        for (index, creature) in self.creatures.iter().enumerate() {
+            let (name_item, health_item) = creature.render(index, selected_index);
+            name_list_items.push(name_item);
+            health_list_items.push(health_item);
+        }
+        let name_list = List::new(name_list_items);
+        let health_list = List::new(health_list_items);
+        StatefulWidget::render(name_list, table_layout[1], buf, &mut self.list_state);
+        StatefulWidget::render(health_list, table_layout[2], buf, &mut self.list_state);
 
         // Notes of selected creature
         Paragraph::new(
@@ -329,7 +345,7 @@ impl Widget for App {
                 .title_bottom(self.mode.get_instructions().centered())
                 .border_set(border::PLAIN),
         )
-        .render(layout[1], buf);
+        .render(main_layout[1], buf);
     }
 }
 
@@ -341,7 +357,7 @@ struct Creature {
 }
 
 impl Creature {
-    fn render(&self, index: usize, selected_index: Option<usize>) -> ListItem {
+    fn render(&self, index: usize, selected_index: Option<usize>) -> (ListItem, ListItem) {
         let selected = selected_index == Some(index);
 
         // Inverse colors when selected
@@ -357,10 +373,12 @@ impl Creature {
             self.name.clone()
         };
 
-        let health = self.health;
-        let text = format!("{name}    {health}");
-
-        ListItem::from(text).fg(fg_color).bg(bg_color)
+        (
+            ListItem::from(name).fg(fg_color).bg(bg_color),
+            ListItem::from(self.health.to_string())
+                .fg(fg_color)
+                .bg(bg_color),
+        )
     }
 }
 
