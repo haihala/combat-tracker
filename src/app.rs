@@ -33,6 +33,8 @@ impl Mode {
                 ")dd, (".into(),
                 "R".blue().bold(),
                 ")ename, (".into(),
+                "C".blue().bold(),
+                ")opy, (".into(),
                 "D".blue().bold(),
                 ")estroy ".into(),
             ]),
@@ -70,23 +72,17 @@ impl App {
             creatures: vec![
                 Creature {
                     name: "Goblin".into(),
-                    damage: 0,
-                    health: Some(5),
-                    quantity: 2,
+                    health: 5,
                     notes: "Very gobliny".into(),
                 },
                 Creature {
                     name: "Chodlin".into(),
-                    damage: 0,
-                    health: Some(4),
-                    quantity: 1,
+                    health: 4,
                     notes: "Cousin of Boblin".into(),
                 },
                 Creature {
                     name: "Boblin".into(),
-                    damage: 0,
-                    health: Some(4),
-                    quantity: 1,
+                    health: 4,
                     notes: "The goblin".into(),
                 },
             ],
@@ -174,6 +170,13 @@ impl App {
                             // Deleted final element in a non-empty list
                             self.list_state.select(Some(self.creatures.len() - 1));
                         }
+                    }
+                }
+                KeyCode::Char('c') => {
+                    if let Some(hovered) = hovered_creature {
+                        let index = self.list_state.selected().unwrap();
+                        let duplicate = hovered.clone();
+                        self.creatures.insert(index + 1, duplicate);
                     }
                 }
                 _ => {}
@@ -289,9 +292,7 @@ impl Widget for App {
 #[derive(Debug, Clone)]
 struct Creature {
     name: String,
-    quantity: usize,
-    damage: usize,
-    health: Option<usize>,
+    health: usize,
     notes: String,
 }
 
@@ -320,9 +321,7 @@ impl Default for Creature {
     fn default() -> Self {
         Creature {
             name: "".into(),
-            quantity: 1,
-            damage: 0,
-            health: None,
+            health: 0,
             notes: "".into(),
         }
     }
