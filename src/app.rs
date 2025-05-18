@@ -1,4 +1,4 @@
-use std::io;
+use std::{fmt::Display, io, str::FromStr};
 
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use log::info;
@@ -19,8 +19,7 @@ enum Mode {
     Rename(String),
     SetHealth(i32),
     SetInitiative(i32),
-    DamageCreature,
-    HealCreature,
+    HealthShift,
     EditNotes(String),
 }
 impl Mode {
@@ -44,20 +43,23 @@ impl Mode {
                 ")health (".into(),
                 "I".blue().bold(),
                 ")nitiative ".into(),
+                "Modify health: ".into(),
+                "+-<num>".blue().bold(),
             ]),
-            Mode::Rename(_) | Mode::SetHealth(_) | Mode::SetInitiative(_) => Line::from(vec![
-                " Confirm: ".into(),
-                "Enter".blue().bold(),
-                ", Cancel: ".into(),
-                "Esc ".blue().bold(),
-            ]),
+            Mode::Rename(_) | Mode::SetHealth(_) | Mode::SetInitiative(_) | Mode::HealthShift => {
+                Line::from(vec![
+                    " Confirm: ".into(),
+                    "Enter".blue().bold(),
+                    ", Cancel: ".into(),
+                    "Esc ".blue().bold(),
+                ])
+            }
             Mode::EditNotes(_) => Line::from(vec![
                 " Confirm: ".into(),
                 "Enter".blue().bold(),
                 " (use alt to break lines), Cancel: ".into(),
                 "Esc ".blue().bold(),
             ]),
-            _ => Line::from(vec![]),
         }
     }
 }
@@ -202,6 +204,18 @@ impl App {
                         self.mode = Mode::SetInitiative(creat.initiative);
                     }
                 }
+                KeyCode::Char('-') => {
+                    if let Some(creature) = hovered_creature {
+                        creature.health_shift = Some(HealthShift::Decrease(0));
+                        self.mode = Mode::HealthShift;
+                    }
+                }
+                KeyCode::Char('+') => {
+                    if let Some(creature) = hovered_creature {
+                        creature.health_shift = Some(HealthShift::Increase(0));
+                        self.mode = Mode::HealthShift;
+                    }
+                }
                 _ => {}
             },
 
@@ -263,24 +277,60 @@ impl App {
             }
 
             Mode::SetHealth(old_amount) => {
-                self.numeric_edit(|creature| &mut creature.health, ev, *old_amount);
+                let old = old_amount.clone();
+                self.numeric_edit(
+                    |creature| creature.health,
+                    |creature, value| creature.health = value,
+                    |creature| creature.health = old,
+                    |_| {},
+                    ev,
+                );
             }
 
             Mode::SetInitiative(old_amount) => {
-                self.numeric_edit(|creature| &mut creature.initiative, ev, *old_amount);
+                let old = old_amount.clone();
+                self.numeric_edit(
+                    |creature| creature.initiative,
+                    |creature, value| creature.initiative = value,
+                    |creature| creature.initiative = old,
+                    |_| {},
+                    ev,
+                );
             }
 
-            _ => {}
+            Mode::HealthShift => {
+                self.numeric_edit(
+                    |creature| match creature.health_shift.unwrap() {
+                        HealthShift::Increase(mag) | HealthShift::Decrease(mag) => mag as i32,
+                    },
+                    |creature, value| match creature.health_shift.as_mut().unwrap() {
+                        HealthShift::Increase(ref mut mag) | HealthShift::Decrease(ref mut mag) => {
+                            *mag = value as u32
+                        }
+                    },
+                    |creature| creature.health_shift = None,
+                    |creature| {
+                        match creature.health_shift.unwrap() {
+                            HealthShift::Increase(mag) => creature.health += mag as i32,
+                            HealthShift::Decrease(mag) => creature.health -= mag as i32,
+                        }
+                        creature.health_shift = None;
+                    },
+                    ev,
+                );
+            }
         }
 
         Ok(())
     }
 
-    fn numeric_edit(
+    fn numeric_edit<T: Clone + Display + Default + FromStr>(
         &mut self,
-        extract: impl Fn(&mut Creature) -> &mut i32,
+        extract: impl Fn(&Creature) -> T,
+        update: impl Fn(&mut Creature, T) -> (),
+        revert: impl Fn(&mut Creature) -> (),
+        commit: impl Fn(&mut Creature) -> (),
         ev: event::KeyEvent,
-        old_amount: i32,
     ) {
         let Some(creature) = self
             .list_state
@@ -290,32 +340,33 @@ impl App {
             panic!("Editing an nonexistent")
         };
 
-        let attribute = extract(creature);
+        let value = extract(creature);
 
         match ev.code {
             KeyCode::Enter => {
+                commit(creature);
                 self.mode = Mode::Normal;
             }
             KeyCode::Esc => {
-                // Revert name
-                *attribute = old_amount.clone();
+                revert(creature);
                 self.mode = Mode::Normal;
             }
             KeyCode::Backspace => {
-                let old_amount = attribute.to_string();
-                *attribute = old_amount
+                let old_amount = value.to_string();
+                let new_amount = old_amount
                     .chars()
                     .take(old_amount.len() - 1)
                     .collect::<String>()
                     .parse()
                     .unwrap_or_default();
+                update(creature, new_amount);
             }
             KeyCode::Char(ch) if ch.is_ascii_digit() => {
-                let mut old_amount = attribute.to_string();
+                let mut old_amount = value.to_string();
                 old_amount.push(ch);
 
                 // If number won't fit, sets to zero
-                *attribute = old_amount.parse().unwrap_or_default();
+                update(creature, old_amount.parse().unwrap_or_default());
             }
 
             _ => {}
@@ -342,9 +393,9 @@ impl Widget for App {
         let table_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints(vec![
-                Constraint::Max(5),  // Initiative
+                Constraint::Max(3),  // Initiative
                 Constraint::Fill(1), // Name
-                Constraint::Max(5),  // Health
+                Constraint::Max(10), // Health
                 Constraint::Fill(2), // Statuses
             ])
             .spacing(1)
@@ -384,10 +435,41 @@ impl Widget for App {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum HealthShift {
+    Increase(u32),
+    Decrease(u32),
+}
+
+impl FromStr for HealthShift {
+    type Err = <i32 as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let numeric: i32 = s.parse()?;
+
+        Ok(if numeric.is_positive() {
+            HealthShift::Increase(numeric.try_into().unwrap())
+        } else {
+            HealthShift::Decrease((-numeric).try_into().unwrap())
+        })
+    }
+}
+
+impl Display for HealthShift {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (sign_char, magnitude) = match self {
+            HealthShift::Increase(mag) => ('+', mag),
+            HealthShift::Decrease(mag) => ('-', mag),
+        };
+        write!(f, "{}{}", sign_char, magnitude)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Creature {
     name: String,
     health: i32,
+    health_shift: Option<HealthShift>,
     initiative: i32,
     notes: String,
 }
@@ -413,14 +495,18 @@ impl Creature {
             self.name.clone()
         };
 
+        let health = if let Some(health_shift) = self.health_shift {
+            format!("{} {}", self.health, health_shift.to_string())
+        } else {
+            self.health.to_string()
+        };
+
         (
             ListItem::from(self.initiative.to_string())
                 .fg(fg_color)
                 .bg(bg_color),
             ListItem::from(name).fg(fg_color).bg(bg_color),
-            ListItem::from(self.health.to_string())
-                .fg(fg_color)
-                .bg(bg_color),
+            ListItem::from(health).fg(fg_color).bg(bg_color),
         )
     }
 }
@@ -430,6 +516,7 @@ impl Default for Creature {
         Creature {
             name: "".into(),
             health: 0,
+            health_shift: None,
             initiative: 0,
             notes: "".into(),
         }
