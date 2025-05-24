@@ -12,7 +12,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Widget},
     DefaultTerminal,
 };
-use tui_textarea::TextArea;
+use tui_textarea::{CursorMove, TextArea};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Mode {
@@ -385,8 +385,10 @@ impl App<'_> {
             (Mode::EditNotes, _) => match (ev.code, ev.kind) {
                 (KeyCode::Esc, KeyEventKind::Press) => {
                     let notes = self.text_area.lines().join("\n");
+                    let cursor_pos = self.text_area.cursor();
                     let creature = self.hovered_creature_mut().unwrap();
                     creature.notes = notes;
+                    creature.notes_cursor_pos = cursor_pos;
                     self.mode = Mode::Normal;
                 }
 
@@ -485,7 +487,11 @@ impl App<'_> {
 
     fn select_creature(&mut self, index: usize) {
         self.list_state.select(Some(index));
-        self.text_area = TextArea::from(self.hovered_creature().unwrap().notes.lines())
+        let creature = self.hovered_creature().unwrap();
+        let (row, col) = creature.notes_cursor_pos;
+        self.text_area = TextArea::from(creature.notes.lines());
+        self.text_area
+            .move_cursor(CursorMove::Jump(row as u16, col as u16));
     }
 
     fn numeric_edit<T: Clone + Display + Default + FromStr>(
@@ -676,6 +682,7 @@ struct Creature {
     health_shift: Option<HealthShift>,
     initiative: i32,
     notes: String,
+    notes_cursor_pos: (usize, usize),
 }
 
 impl Creature {
@@ -723,6 +730,7 @@ impl Default for Creature {
             health_shift: None,
             initiative: 0,
             notes: "".into(),
+            notes_cursor_pos: (0, 0),
         }
     }
 }
