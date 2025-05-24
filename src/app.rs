@@ -89,7 +89,7 @@ enum HotKey {
     },
 }
 
-const HELP_BLURB: &'static str = "\
+const HELP_BLURB: &str = "\
 Howdy partner, this is a combat tracker I use for my Pathfinder 2e games.
 It's designed for me and since I'm a bit of a power user, so it's a modal
 system that's exclusively keyboard operated.
@@ -397,7 +397,7 @@ impl App<'_> {
                 }
             },
             (Mode::SetHealth(old_amount), KeyEventKind::Press) => {
-                let old = old_amount.clone();
+                let old = *old_amount;
                 self.numeric_edit(
                     |creature| creature.health,
                     |creature, value| creature.health = value,
@@ -407,7 +407,7 @@ impl App<'_> {
                 );
             }
             (Mode::SetInitiative(old_amount), KeyEventKind::Press) => {
-                let old = old_amount.clone();
+                let old = *old_amount;
                 self.numeric_edit(
                     |creature| creature.initiative,
                     |creature, value| creature.initiative = value,
@@ -497,9 +497,9 @@ impl App<'_> {
     fn numeric_edit<T: Clone + Display + Default + FromStr>(
         &mut self,
         extract: impl Fn(&Creature) -> T,
-        update: impl Fn(&mut Creature, T) -> (),
-        revert: impl Fn(&mut Creature) -> (),
-        commit: impl Fn(&mut Creature) -> (),
+        update: impl Fn(&mut Creature, T),
+        revert: impl Fn(&mut Creature),
+        commit: impl Fn(&mut Creature),
         ev: event::KeyEvent,
     ) {
         let Some(creature) = self
@@ -552,7 +552,7 @@ impl App<'_> {
 
         Paragraph::new(HELP_BLURB).render(main_layout[0], buf);
 
-        let list = List::new(HOTKEYS.into_iter().flat_map(|hk| match hk {
+        let list = List::new(HOTKEYS.iter().flat_map(|hk| match hk {
             HotKey::Divider { text, newline } => {
                 let div = Line::from(text.bold());
 
@@ -707,7 +707,7 @@ impl Creature {
         };
 
         let health = if let Some(health_shift) = self.health_shift {
-            format!("{} {}", self.health, health_shift.to_string())
+            format!("{} {}", self.health, health_shift)
         } else {
             self.health.to_string()
         };
