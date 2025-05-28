@@ -280,20 +280,26 @@ impl App<'_> {
                     KeyCode::Char('k') => self.select_creature({
                         let curr = self.list_state.selected().unwrap_or_default();
                         if curr == 0 {
-                            self.creatures.len() - 1
+                            self.creatures.len().saturating_sub(1)
                         } else {
                             curr - 1
                         }
                     }),
-                    KeyCode::Char('j') => self.select_creature(
-                        (self
-                            .list_state
-                            .selected()
-                            .map(|num| num + 1)
-                            .unwrap_or_default())
-                            % self.creatures.len(),
-                    ),
-                    KeyCode::Char('J') => self.select_creature(self.creatures.len() - 1),
+                    KeyCode::Char('j') => self.select_creature({
+                        if self.creatures.is_empty() {
+                            0
+                        } else {
+                            (self
+                                .list_state
+                                .selected()
+                                .map(|num| num + 1)
+                                .unwrap_or_default())
+                                % self.creatures.len()
+                        }
+                    }),
+                    KeyCode::Char('J') => {
+                        self.select_creature(self.creatures.len().saturating_sub(1))
+                    }
 
                     // Actions
                     KeyCode::Char('a') => {
@@ -487,11 +493,12 @@ impl App<'_> {
 
     fn select_creature(&mut self, index: usize) {
         self.list_state.select(Some(index));
-        let creature = self.hovered_creature().unwrap();
-        let (row, col) = creature.notes_cursor_pos;
-        self.text_area = TextArea::from(creature.notes.lines());
-        self.text_area
-            .move_cursor(CursorMove::Jump(row as u16, col as u16));
+        if let Some(creature) = self.hovered_creature() {
+            let (row, col) = creature.notes_cursor_pos;
+            self.text_area = TextArea::from(creature.notes.lines());
+            self.text_area
+                .move_cursor(CursorMove::Jump(row as u16, col as u16));
+        }
     }
 
     fn numeric_edit<T: Clone + Display + Default + FromStr>(
