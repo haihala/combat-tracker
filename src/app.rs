@@ -22,6 +22,7 @@ use tui_textarea::{CursorMove, TextArea};
 enum Mode {
     Help,
     Normal,
+    Meta(usize),
     Rename(String),
     SetHealth(i32),
     SetInitiative(i32),
@@ -33,6 +34,14 @@ impl Mode {
     fn get_instructions(&self) -> Line {
         match self {
             Mode::Help => panic!("Should not ask for instructions in help mode"),
+            Mode::Meta(_) => Line::from(vec![
+                " Back to normal mode: ".into(),
+                "Esc".blue().bold(),
+                " Navigate: ".into(),
+                "j/k".blue().bold(),
+                " Select: ".into(),
+                "Enter ".blue().bold(),
+            ]),
             Mode::Normal => Line::from(vec![
                 " Exit: ".into(),
                 "Esc".blue().bold(),
@@ -277,8 +286,7 @@ impl App<'_> {
         match (&self.mode, ev.kind) {
             (Mode::Normal, KeyEventKind::Press) => {
                 match ev.code {
-                    // Quitting
-                    KeyCode::Esc => self.running = false,
+                    KeyCode::Esc => self.mode = Mode::Meta(0),
 
                     KeyCode::Char('?') => self.mode = Mode::Help,
                     KeyCode::Char('s') => self.mode = Mode::Sort,
@@ -377,6 +385,14 @@ impl App<'_> {
                     _ => {}
                 }
             }
+            (Mode::Meta(selection), KeyEventKind::Press) => match ev.code {
+                KeyCode::Esc => self.mode = Mode::Normal,
+                KeyCode::Enter if *selection == 0 => self.mode = Mode::Normal,
+                KeyCode::Enter if *selection == 1 => self.running = false,
+                // Since there are only two options, we can just do this
+                KeyCode::Char('k') | KeyCode::Char('j') => self.mode = Mode::Meta(1 - selection),
+                _ => {}
+            },
             (Mode::Rename(old_name), KeyEventKind::Press) => {
                 let mut name = self.hovered_creature().unwrap().name.clone();
                 match ev.code {
@@ -607,6 +623,22 @@ impl App<'_> {
         Widget::render(list, main_layout[1], buf);
     }
 
+    fn render_meta(&mut self, area: Rect, buf: &mut Buffer, selected_index: usize) {
+        let list = List::new(
+            vec!["Return to normal mode", "Quit"]
+                .iter()
+                .enumerate()
+                .map(|(index, option)| {
+                    if index == selected_index {
+                        Line::from(option.to_string()).blue()
+                    } else {
+                        Line::from(option.to_string())
+                    }
+                }),
+        );
+        Widget::render(list, area, buf);
+    }
+
     fn render_normal(&mut self, area: Rect, buf: &mut Buffer) {
         let main_layout = Layout::default()
             .direction(Direction::Vertical)
@@ -672,10 +704,10 @@ fn new_text_area<'a>(lines: Vec<String>) -> TextArea<'a> {
 
 impl Widget for App<'_> {
     fn render(mut self, area: Rect, buf: &mut Buffer) {
-        if self.mode == Mode::Help {
-            self.render_help(area, buf)
-        } else {
-            self.render_normal(area, buf)
+        match self.mode {
+            Mode::Help => self.render_help(area, buf),
+            Mode::Meta(index) => self.render_meta(area, buf, index),
+            _ => self.render_normal(area, buf),
         }
     }
 }
