@@ -17,7 +17,7 @@ fn main() -> io::Result<()> {
     }
 
     let terminal = ratatui::init();
-    let result = app::App::new().run(terminal);
+    let result = app::App::new(parsed_args.init_test_creatures).run(terminal);
     ratatui::restore();
     result
 }

@@ -205,31 +205,35 @@ const HOTKEYS: &[HotKey] = &[
 ];
 
 impl App<'_> {
-    pub fn new() -> App<'static> {
+    pub fn new(init_test_creatures: bool) -> App<'static> {
         App {
             running: true,
             mode: Mode::Normal,
             list_state: ListState::default(),
-            creatures: vec![
-                Creature {
-                    name: "Goblin".into(),
-                    health: 5,
-                    notes: "Very gobliny".into(),
-                    ..Default::default()
-                },
-                Creature {
-                    name: "Chodlin".into(),
-                    health: 4,
-                    notes: "Cousin of Boblin".into(),
-                    ..Default::default()
-                },
-                Creature {
-                    name: "Boblin".into(),
-                    health: 4,
-                    notes: "The goblin".into(),
-                    ..Default::default()
-                },
-            ],
+            creatures: if init_test_creatures {
+                vec![
+                    Creature {
+                        name: "Goblin".into(),
+                        health: 5,
+                        notes: "Very gobliny".into(),
+                        ..Default::default()
+                    },
+                    Creature {
+                        name: "Chodlin".into(),
+                        health: 4,
+                        notes: "Cousin of Boblin".into(),
+                        ..Default::default()
+                    },
+                    Creature {
+                        name: "Boblin".into(),
+                        health: 4,
+                        notes: "The goblin".into(),
+                        ..Default::default()
+                    },
+                ]
+            } else {
+                vec![]
+            },
             text_area: TextArea::default(),
         }
     }
