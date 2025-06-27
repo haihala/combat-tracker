@@ -1,4 +1,8 @@
-use std::{fmt::Display, io, str::FromStr};
+use std::{
+    fmt::Display,
+    io::{self},
+    str::FromStr,
+};
 
 use log::info;
 use ratatui::{
@@ -234,7 +238,7 @@ impl App<'_> {
             } else {
                 vec![]
             },
-            text_area: TextArea::default(),
+            text_area: new_text_area(vec![]),
         }
     }
 
@@ -311,7 +315,7 @@ impl App<'_> {
                             name: "".into(),
                             ..Creature::default()
                         });
-                        self.list_state.select(Some(self.creatures.len() - 1));
+                        self.select_creature(self.creatures.len() - 1);
                         self.mode = Mode::Rename(String::new());
                     }
                     KeyCode::Char('r') => {
@@ -338,9 +342,13 @@ impl App<'_> {
                             self.creatures.remove(index);
                             if self.creatures.is_empty() {
                                 self.list_state.select(None);
+                                self.text_area = new_text_area(vec![]);
                             } else if self.creatures.len() == index {
                                 // Deleted final element in a non-empty list
-                                self.list_state.select(Some(self.creatures.len() - 1));
+                                self.select_creature(self.creatures.len() - 1);
+                            } else {
+                                // Reselect current index to update notes
+                                self.select_creature(index);
                             }
                         }
                     }
@@ -499,7 +507,13 @@ impl App<'_> {
         self.list_state.select(Some(index));
         if let Some(creature) = self.hovered_creature() {
             let (row, col) = creature.notes_cursor_pos;
-            self.text_area = TextArea::from(creature.notes.lines());
+            self.text_area = new_text_area(
+                creature
+                    .notes
+                    .lines()
+                    .map(|slice| slice.to_string())
+                    .collect(),
+            );
             self.text_area
                 .move_cursor(CursorMove::Jump(row as u16, col as u16));
         }
@@ -644,6 +658,16 @@ impl App<'_> {
         self.text_area.render(note_block.inner(main_layout[1]), buf);
         note_block.render(main_layout[1], buf);
     }
+}
+
+fn new_text_area<'a>(lines: Vec<String>) -> TextArea<'a> {
+    // Centralized here so we can add stuff like line numbers
+    // We need to recreate it occasionally because you can't set the content after creation
+    let mut ta = TextArea::new(lines);
+    ta.set_line_number_style(Style::default().bg(Color::DarkGray));
+    ta.set_cursor_style(Style::default()); // No underline on cursor line, doesn't work
+
+    ta
 }
 
 impl Widget for App<'_> {
