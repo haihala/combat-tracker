@@ -1,4 +1,5 @@
 use clap::Parser;
+use log::info;
 use simplelog::{Config, LevelFilter, WriteLogger};
 use std::{fs::File, io};
 
@@ -12,8 +13,9 @@ fn main() -> io::Result<()> {
         let _ = WriteLogger::init(
             LevelFilter::Info,
             Config::default(),
-            File::create("info.log").unwrap(),
+            File::create("combat-tracker.log").unwrap(),
         );
+        info!("Beginning of log");
     }
 
     let terminal = ratatui::init();
