@@ -631,7 +631,8 @@ impl App<'_> {
                         Line::from(option.to_string())
                     }
                 }),
-        );
+        )
+        .block(Block::default().title_bottom(self.mode.get_instructions().centered()));
         Widget::render(list, area, buf);
     }
 
@@ -662,12 +663,11 @@ impl App<'_> {
             .split(table_block.inner(main_layout[0]));
         table_block.render(main_layout[0], buf);
 
-        let selected_index = self.selected_creature;
         let (initiative_list, name_list, health_list) = self
             .creatures
             .iter()
             .enumerate()
-            .map(|(index, creature)| creature.render(index, selected_index))
+            .map(|(index, creature)| creature.render(index, self.selected_creature))
             .collect::<(Vec<ListItem>, Vec<ListItem>, Vec<ListItem>)>();
 
         for (column, items) in [initiative_list, name_list, health_list]
