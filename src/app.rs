@@ -13,7 +13,7 @@ use ratatui::{
     style::Stylize,
     symbols::border,
     text::Line,
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Widget},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Widget},
     DefaultTerminal,
 };
 use tui_textarea::{CursorMove, TextArea};
@@ -81,7 +81,7 @@ impl Mode {
 pub struct App<'a> {
     running: bool,
     mode: Mode,
-    list_state: ListState,
+    selected_creature: Option<usize>,
     creatures: Vec<Creature>,
     text_area: TextArea<'a>,
 }
@@ -222,7 +222,7 @@ impl App<'_> {
         App {
             running: true,
             mode: Mode::Normal,
-            list_state: ListState::default(),
+            selected_creature: if init_test_creatures { Some(0) } else { None },
             creatures: if init_test_creatures {
                 vec![
                     Creature {
@@ -265,14 +265,12 @@ impl App<'_> {
     }
 
     fn hovered_creature(&self) -> Option<&Creature> {
-        self.list_state
-            .selected()
+        self.selected_creature
             .and_then(|index| self.creatures.get(index))
     }
 
     fn hovered_creature_mut(&mut self) -> Option<&mut Creature> {
-        self.list_state
-            .selected()
+        self.selected_creature
             .and_then(|index| self.creatures.get_mut(index))
     }
 
@@ -294,7 +292,7 @@ impl App<'_> {
                     // Navigation
                     KeyCode::Char('K') => self.select_creature(0),
                     KeyCode::Char('k') => self.select_creature({
-                        let curr = self.list_state.selected().unwrap_or_default();
+                        let curr = self.selected_creature.unwrap_or_default();
                         if curr == 0 {
                             self.creatures.len().saturating_sub(1)
                         } else {
@@ -306,8 +304,7 @@ impl App<'_> {
                             0
                         } else {
                             (self
-                                .list_state
-                                .selected()
+                                .selected_creature
                                 .map(|num| num + 1)
                                 .unwrap_or_default())
                                 % self.creatures.len()
@@ -339,17 +336,17 @@ impl App<'_> {
                     KeyCode::Char('c') => {
                         // TODO: Think about automatically renaming with indices or something
                         if let Some(hovered) = self.hovered_creature() {
-                            let index = self.list_state.selected().unwrap();
+                            let index = self.selected_creature.unwrap();
                             let duplicate = hovered.clone();
                             self.creatures.insert(index + 1, duplicate);
                         }
                     }
                     KeyCode::Char('d') => {
                         if self.hovered_creature().is_some() {
-                            let index = self.list_state.selected().unwrap();
+                            let index = self.selected_creature.unwrap();
                             self.creatures.remove(index);
                             if self.creatures.is_empty() {
-                                self.list_state.select(None);
+                                self.selected_creature = None;
                                 self.text_area = new_text_area(vec![]);
                             } else if self.creatures.len() == index {
                                 // Deleted final element in a non-empty list
@@ -520,7 +517,7 @@ impl App<'_> {
     }
 
     fn select_creature(&mut self, index: usize) {
-        self.list_state.select(Some(index));
+        self.selected_creature = Some(index);
         if let Some(creature) = self.hovered_creature() {
             let (row, col) = creature.notes_cursor_pos;
             self.text_area = new_text_area(
@@ -544,8 +541,7 @@ impl App<'_> {
         ev: event::KeyEvent,
     ) {
         let Some(creature) = self
-            .list_state
-            .selected()
+            .selected_creature
             .and_then(|index| self.creatures.get_mut(index))
         else {
             panic!("Editing an nonexistent")
@@ -666,7 +662,7 @@ impl App<'_> {
             .split(table_block.inner(main_layout[0]));
         table_block.render(main_layout[0], buf);
 
-        let selected_index = self.list_state.selected();
+        let selected_index = self.selected_creature;
         let (initiative_list, name_list, health_list) = self
             .creatures
             .iter()
@@ -679,7 +675,7 @@ impl App<'_> {
             .enumerate()
         {
             let list = List::new(items);
-            StatefulWidget::render(list, table_layout[column], buf, &mut self.list_state);
+            Widget::render(list, table_layout[column], buf);
         }
 
         // Notes of selected creature
