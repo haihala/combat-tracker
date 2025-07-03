@@ -35,42 +35,42 @@ impl Mode {
         match self {
             Mode::Help => panic!("Should not ask for instructions in help mode"),
             Mode::Meta(_) => Line::from(vec![
-                " Back to normal mode: ".into(),
+                " Back to normal mode: ".white(),
                 "Esc".blue().bold(),
-                " Navigate: ".into(),
+                " Navigate: ".white(),
                 "j/k".blue().bold(),
-                " Select: ".into(),
+                " Select: ".white(),
                 "Enter ".blue().bold(),
             ]),
             Mode::Normal => Line::from(vec![
-                " Exit: ".into(),
+                " Exit: ".white(),
                 "Esc".blue().bold(),
-                " Help: ".into(),
+                " Help: ".white(),
                 "? ".blue().bold(),
             ]),
             Mode::Rename(_) | Mode::SetHealth(_) | Mode::SetInitiative(_) | Mode::HealthShift => {
                 Line::from(vec![
-                    " Confirm: ".into(),
+                    " Confirm: ".white(),
                     "Enter".blue().bold(),
-                    ", Cancel: ".into(),
+                    ", Cancel: ".white(),
                     "Esc ".blue().bold(),
                 ])
             }
             Mode::Sort => Line::from(vec![
-                " Press letter to determine order, shift reverses: (".into(),
+                " Press letter to determine order, shift reverses: (".white(),
                 "I".blue().bold(),
-                ")nitiative, (".into(),
+                ")nitiative, (".white(),
                 "H".blue().bold(),
-                ")ealth, (".into(),
+                ")ealth, (".white(),
                 "N".blue().bold(),
-                ")ame or ".into(),
+                ")ame or ".white(),
                 "Esc".blue().bold(),
-                "to cancel".into(),
+                "to cancel".white(),
             ]),
             Mode::EditNotes => Line::from(vec![
-                " Confirm: ".into(),
+                " Confirm: ".white(),
                 "Enter".blue().bold(),
-                " (use alt to break lines), Cancel: ".into(),
+                " (use alt to break lines), Cancel: ".white(),
                 "Esc ".blue().bold(),
             ]),
         }
@@ -646,10 +646,28 @@ impl App<'_> {
             .spacing(1)
             .split(area);
 
+        let (table_border, table_border_color, notes_border, notes_border_color) =
+            if self.mode == Mode::EditNotes {
+                (
+                    border::PLAIN,
+                    Style::default(),
+                    border::DOUBLE,
+                    Style::default().blue(),
+                )
+            } else {
+                (
+                    border::DOUBLE,
+                    Style::default().blue(),
+                    border::PLAIN,
+                    Style::default(),
+                )
+            };
+
         // Creature table
         let table_block = Block::bordered()
             .title(Line::from(" Creatures ".bold()).centered())
-            .borders(Borders::ALL);
+            .border_set(table_border)
+            .border_style(table_border_color);
 
         let table_layout = Layout::default()
             .direction(Direction::Horizontal)
@@ -682,7 +700,8 @@ impl App<'_> {
         let note_block = Block::bordered()
             .title(Line::from(" Notes ".bold()).centered())
             .title_bottom(self.mode.get_instructions().centered())
-            .border_set(border::PLAIN);
+            .border_set(notes_border)
+            .border_style(notes_border_color);
         self.text_area.render(note_block.inner(main_layout[1]), buf);
         note_block.render(main_layout[1], buf);
     }
