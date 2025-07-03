@@ -402,7 +402,7 @@ impl App<'_> {
                         self.mode = Mode::Normal;
                     }
                     KeyCode::Backspace => {
-                        name = name.chars().take(name.len().saturating_sub(1)).collect();
+                        name.pop();
                     }
                     KeyCode::Char(ch) => {
                         name.push(ch);
@@ -559,13 +559,9 @@ impl App<'_> {
                 self.mode = Mode::Normal;
             }
             KeyCode::Backspace => {
-                let old_amount = value.to_string();
-                let new_amount = old_amount
-                    .chars()
-                    .take(old_amount.len() - 1)
-                    .collect::<String>()
-                    .parse()
-                    .unwrap_or_default();
+                let mut old_amount = value.to_string();
+                old_amount.pop();
+                let new_amount = old_amount.parse().unwrap_or_default();
                 update(creature, new_amount);
             }
             KeyCode::Char(ch) if ch.is_ascii_digit() => {
